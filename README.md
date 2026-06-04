@@ -1,57 +1,74 @@
 # Calendario Actividades Oasis
 
-Aplicación web en Streamlit para visualizar el calendario mensual de servicios, actividades y grupos de servicio de la iglesia.
+Aplicación web en Python + Streamlit para visualizar el calendario mensual de actividades, servicios, servidores asignados y grupo semanal activo de Iglesia Oasis.
 
 ## Archivos principales
 
-- `app.py`: aplicación Streamlit.
-- `calendario_iglesia_datos.xlsx`: respaldo local de datos.
-- `requirements.txt`: librerías necesarias.
-- `README.md`: instrucciones.
+```text
+app.py
+requirements.txt
+calendario_iglesia_datos.xlsx
+README.md
+```
 
-## Hojas necesarias en Google Sheets o Excel
+## Fuente de datos
 
-La estructura debe mantenerse igual:
+La app trabaja con dos fuentes:
 
-- `Lista Servidores`
-- `Servidores`
-- `Servicios`
-- `Estados`
-- `Meses`
-- `Registro Servicios`
-- `Configuracion`
+1. **Google Sheets**, como fuente principal si está configurado en Streamlit Secrets.
+2. **calendario_iglesia_datos.xlsx**, como respaldo local si Google Sheets falla o no está configurado.
 
-## Opción intermedia de datos
+## Hojas necesarias
 
-La app intenta leer primero desde Google Sheets. Si Google Sheets no está configurado o falla, usa el archivo local `calendario_iglesia_datos.xlsx` como respaldo.
+El archivo de datos debe conservar estas hojas:
+
+```text
+Lista Servidores
+Servidores
+Servicios
+Estados
+Meses
+Registro Servicios
+Configuracion
+```
+
+## Visualización
+
+La vista muestra:
+
+- Título principal: Calendario Actividades Oasis.
+- Filtros compactos de año y mes.
+- Calendario mensual en cuadrícula completa de domingo a sábado.
+- Días del mes anterior o siguiente cuando se necesiten para completar la cuadrícula.
+- Nombre del día y fecha dentro de cada tarjeta.
+- Servicios expandibles dentro de cada día.
+- Actividades visibles directamente.
+- Estado solo para actividades.
+- Alerta visual si una persona tiene doble privilegio el mismo día.
+- Grupo semanal activo y listado expandible de servidores del grupo.
+
+## Configuración de Google Sheets público
+
+En Streamlit Community Cloud entra a tu app y abre:
+
+```text
+Settings > Secrets
+```
+
+Agrega:
+
+```toml
+[google_sheets]
+enabled = true
+spreadsheet_id = "PEGA_AQUI_EL_ID_DEL_GOOGLE_SHEETS"
+mode = "public"
+```
+
+El Google Sheets debe tener permisos de lectura por enlace.
 
 ## Configuración de Google Sheets privado
 
-### 1. Subir el Excel a Google Drive
-
-1. Entra a Google Drive.
-2. Sube `calendario_iglesia_datos.xlsx`.
-3. Ábrelo con Google Sheets.
-4. Revisa que las pestañas tengan exactamente los mismos nombres.
-
-### 2. Crear una cuenta de servicio en Google Cloud
-
-1. Entra a Google Cloud Console.
-2. Crea o selecciona un proyecto.
-3. Activa Google Sheets API.
-4. Crea una Service Account.
-5. Genera una clave JSON.
-6. Copia el correo de la Service Account.
-7. Comparte tu Google Sheets con ese correo como lector.
-
-### 3. Agregar Secrets en Streamlit Community Cloud
-
-En tu app publicada:
-
-1. Entra a Manage app.
-2. Abre Settings.
-3. Entra a Secrets.
-4. Agrega esta estructura:
+En Secrets agrega:
 
 ```toml
 [google_sheets]
@@ -73,61 +90,36 @@ client_x509_cert_url = "..."
 universe_domain = "googleapis.com"
 ```
 
-El `spreadsheet_id` es la parte del enlace que aparece entre `/d/` y `/edit`.
+Luego comparte el Google Sheets con el correo `client_email` de la service account como lector.
 
-Ejemplo:
+## Ejecutar localmente
 
-```text
-https://docs.google.com/spreadsheets/d/ESTE_ES_EL_ID/edit
+```bash
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-## Opción Google Sheets público
+## Subir cambios a GitHub
 
-Si quieres una configuración más rápida, puedes compartir el Google Sheets como lectura pública y usar:
-
-```toml
-[google_sheets]
-enabled = true
-spreadsheet_id = "PEGA_AQUI_EL_ID_DEL_GOOGLE_SHEETS"
-mode = "public"
-```
-
-En este modo no necesitas `[google_service_account]`, pero cualquier persona con el enlace del Sheet podría verlo.
-
-## Modo respaldo local
-
-Si no configuras Secrets, la app usará automáticamente:
-
-```text
-calendario_iglesia_datos.xlsx
-```
-
-Este archivo debe estar en la misma carpeta que `app.py`.
-
-## Actualizar el repositorio
-
-Después de reemplazar archivos en VS Code:
+Después de reemplazar archivos o modificar el Excel de respaldo:
 
 ```bash
 git status
 git add .
-git commit -m "Actualizar calendario Oasis"
+git commit -m "Actualizar calendario visual"
 git push
 ```
 
-Streamlit actualizará la app desde GitHub.
+Streamlit actualizará la app conectada al repositorio.
 
-## Cambios visuales incluidos
+## Actualizar solo datos
 
-- Título superior: `Calendario Actividades Oasis`.
-- Filtros compactos de año y mes en la parte superior.
-- Sin descripción inicial.
-- Sin métricas de resumen.
-- Sin selector de días.
-- Sin fila independiente con nombres de días.
-- Cada fecha muestra su día y fecha dentro del recuadro.
-- Las fechas fuera del mes se muestran para mantener una cuadrícula completa y simétrica.
-- Los servicios aparecen como etiquetas expandibles dentro de cada fecha.
-- El estado se muestra únicamente en actividades.
-- Se mantiene la alerta de doble privilegio.
-- Se mantiene la rotación semanal de grupos.
+Si ya usas Google Sheets, solo edita el Google Sheets y recarga la app.
+
+Si cambias el Excel local de respaldo, guarda el archivo y súbelo al repositorio:
+
+```bash
+git add calendario_iglesia_datos.xlsx
+git commit -m "Actualizar datos de respaldo"
+git push
+```
