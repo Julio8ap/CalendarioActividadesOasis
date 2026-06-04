@@ -1,134 +1,141 @@
 import calendar
-import os
+import json
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 
 st.set_page_config(
-    page_title="Calendario de Servicios Iglesia",
+    page_title="Calendario Actividades Oasis",
     page_icon="📅",
     layout="wide",
 )
 
+BASE_DIR = Path(__file__).parent
+LOCAL_EXCEL_PATH = BASE_DIR / "calendario_iglesia_datos.xlsx"
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
 
 # =========================
-# Configuración visual
+# Diseño visual
 # =========================
 st.markdown(
     """
     <style>
     .block-container {
         padding-top: 1.1rem;
-        padding-left: 1.4rem;
-        padding-right: 1.4rem;
-        max-width: 100%;
+        padding-bottom: 2rem;
+        max-width: 1500px;
     }
-    .main-title {
-        font-size: 1.7rem;
-        font-weight: 850;
-        color: #0f766e;
-        margin-bottom: 0.1rem;
+    .oasis-title {
+        background: linear-gradient(135deg, #0f766e 0%, #0891b2 55%, #2563eb 100%);
+        color: #ffffff;
+        padding: 1rem 1.4rem;
+        border-radius: 1.15rem;
+        font-size: 2rem;
+        font-weight: 900;
+        letter-spacing: .2px;
+        box-shadow: 0 10px 30px rgba(15, 118, 110, .18);
+        margin-bottom: .75rem;
+        text-align: center;
     }
-    .subtitle {
-        color: #475569;
-        margin-bottom: 0.5rem;
-        font-size: 0.92rem;
-    }
-    .top-selector-card {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.85rem;
-        padding: 0.7rem 0.85rem 0.2rem 0.85rem;
-        margin-bottom: 0.7rem;
+    div[data-testid="stMetric"], .metric-container {
+        display: none !important;
     }
     .week-group {
         background: #0f766e;
         color: white;
         font-weight: 850;
         text-align: center;
-        padding: 0.38rem;
-        border-radius: 0.75rem;
-        margin: 0.35rem 0 0.2rem 0;
-        font-size: 0.9rem;
+        padding: 0.55rem;
+        border-radius: 0.85rem;
+        margin: 0.55rem 0 0.45rem 0;
+        font-size: .95rem;
     }
-    .day-header {
+    .date-header {
         font-weight: 900;
         color: #0f172a;
-        font-size: 0.95rem;
-        margin-bottom: 0.2rem;
-        line-height: 1.15rem;
+        font-size: .98rem;
+        margin-bottom: .35rem;
+        padding-bottom: .25rem;
+        border-bottom: 1px solid #e2e8f0;
     }
-    .day-header-muted {
-        font-weight: 800;
-        color: #94a3b8;
-        font-size: 0.86rem;
-        margin-bottom: 0.2rem;
+    .outside-month {
+        color: #64748b;
     }
-    .section-title {
-        font-weight: 850;
-        color: #0f766e;
-        margin-top: 0.35rem;
-        font-size: 0.82rem;
-    }
-    .person {
-        font-size: 0.80rem;
-        color: #0f172a;
-        line-height: 1.1rem;
-    }
-    .activity {
+    .today-pill {
         display: inline-block;
-        background: #e0f2fe;
-        color: #075985;
-        border-radius: 0.5rem;
-        padding: 0.10rem 0.35rem;
-        margin: 0.08rem 0.08rem 0.08rem 0;
-        font-size: 0.72rem;
-        font-weight: 750;
+        background: #fef3c7;
+        color: #92400e;
+        border-radius: 999px;
+        padding: .05rem .35rem;
+        font-size: .67rem;
+        font-weight: 900;
+        margin-left: .25rem;
     }
     .alert-chip {
         display: inline-block;
         background: #fee2e2;
         color: #991b1b;
-        border-radius: 0.5rem;
-        padding: 0.10rem 0.35rem;
-        margin: 0.08rem 0;
-        font-size: 0.72rem;
+        border-radius: 0.65rem;
+        padding: 0.16rem 0.46rem;
+        margin: 0.12rem 0 0.35rem 0;
+        font-size: 0.76rem;
         font-weight: 850;
     }
-    .ok-chip {
-        display: inline-block;
-        background: #dcfce7;
-        color: #166534;
-        border-radius: 0.5rem;
-        padding: 0.10rem 0.35rem;
-        margin: 0.08rem 0;
-        font-size: 0.72rem;
-        font-weight: 850;
+    .activity-chip {
+        display: block;
+        background: #e0f2fe;
+        color: #075985;
+        border-radius: 0.65rem;
+        padding: 0.22rem 0.48rem;
+        margin: 0.16rem 0;
+        font-size: 0.78rem;
+        font-weight: 750;
+        line-height: 1.15rem;
+    }
+    .activity-title {
+        font-weight: 900;
+        color: #0f766e;
+        margin-top: 0.35rem;
+        margin-bottom: 0.15rem;
+        font-size: 0.84rem;
     }
     .small-muted {
-        color: #64748b;
-        font-size: 0.76rem;
+        color: #94a3b8;
+        font-size: 0.78rem;
+        margin-top: .25rem;
     }
-    .day-name-head {
-        text-align: center;
-        font-weight: 850;
-        color: #334155;
-        font-size: 0.86rem;
-        padding-bottom: 0.15rem;
+    .person-line {
+        font-size: .83rem;
+        line-height: 1.23rem;
+        color: #0f172a;
     }
-    .stExpander details {
-        border-radius: 0.55rem !important;
+    .source-ok {
+        background: #dcfce7;
+        color: #166534;
+        border-radius: .7rem;
+        padding: .5rem .65rem;
+        font-size: .82rem;
+        font-weight: 750;
     }
-    div[data-testid="stMetric"] {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        padding: 0.45rem 0.65rem;
-        border-radius: 0.75rem;
+    .source-warn {
+        background: #fef3c7;
+        color: #92400e;
+        border-radius: .7rem;
+        padding: .5rem .65rem;
+        font-size: .82rem;
+        font-weight: 750;
     }
-    div[data-testid="stMetricValue"] {
-        font-size: 1.15rem;
+    /* Hace más compactos los expanders dentro de cada fecha */
+    div[data-testid="stExpander"] details summary p {
+        font-size: .82rem !important;
+        font-weight: 850 !important;
+    }
+    div[data-testid="stExpander"] {
+        margin-bottom: .18rem;
     }
     </style>
     """,
@@ -137,7 +144,7 @@ st.markdown(
 
 
 # =========================
-# Utilidades
+# Catálogos base
 # =========================
 MESES_ES = {
     1: "Enero",
@@ -157,32 +164,124 @@ MESES_ES = {
 DIAS_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
 
-def day_name_es(d: date) -> str:
-    # Python weekday: lunes=0, domingo=6
-    return DIAS_ES[(d.weekday() + 1) % 7]
-
-
+# =========================
+# Lectura de datos
+# =========================
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
 
-@st.cache_data(show_spinner=False)
-def load_excel(path: str, modified_time: float) -> dict:
-    # modified_time se usa para que Streamlit recargue el Excel cuando el archivo cambie.
+@st.cache_data(show_spinner=False, ttl=120)
+def load_excel_from_path(path: str) -> dict:
     xls = pd.ExcelFile(path)
+    return {sheet: normalize_columns(pd.read_excel(xls, sheet_name=sheet)) for sheet in xls.sheet_names}
+
+
+@st.cache_data(show_spinner=False, ttl=120)
+def load_google_public_excel(spreadsheet_id: str) -> dict:
+    url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=xlsx"
+    xls = pd.ExcelFile(url)
+    return {sheet: normalize_columns(pd.read_excel(xls, sheet_name=sheet)) for sheet in xls.sheet_names}
+
+
+@st.cache_data(show_spinner=False, ttl=120)
+def load_google_private(spreadsheet_id: str, service_account_json: str) -> dict:
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    credentials_info = json.loads(service_account_json)
+    creds = Credentials.from_service_account_info(credentials_info, scopes=GOOGLE_SCOPES)
+    client = gspread.authorize(creds)
+    book = client.open_by_key(spreadsheet_id)
+
     data = {}
-    for sheet in xls.sheet_names:
-        data[sheet] = normalize_columns(pd.read_excel(xls, sheet_name=sheet))
+    for ws in book.worksheets():
+        rows = ws.get_all_values()
+        if not rows:
+            data[ws.title] = pd.DataFrame()
+            continue
+        header = [str(c).strip() for c in rows[0]]
+        body = rows[1:]
+        data[ws.title] = normalize_columns(pd.DataFrame(body, columns=header))
     return data
 
 
+def get_secret_value(*keys, default=None):
+    current = st.secrets
+    try:
+        for key in keys:
+            if hasattr(current, "get"):
+                current = current.get(key)
+            else:
+                current = current[key]
+            if current is None:
+                return default
+        return current
+    except Exception:
+        return default
+
+
+def load_data_with_fallback() -> tuple[dict, str, str | None]:
+    """Primero intenta Google Sheets. Si falla o no está configurado, usa Excel local."""
+    google_enabled = bool(get_secret_value("google_sheets", "enabled", default=False))
+    spreadsheet_id = get_secret_value("google_sheets", "spreadsheet_id", default=None)
+    google_mode = str(get_secret_value("google_sheets", "mode", default="private")).lower().strip()
+
+    if google_enabled and spreadsheet_id:
+        try:
+            service_account = get_secret_value("google_service_account", default=None)
+            if service_account:
+                data = load_google_private(spreadsheet_id, json.dumps(dict(service_account)))
+                return data, "Google Sheets privado", None
+            if google_mode == "public":
+                data = load_google_public_excel(spreadsheet_id)
+                return data, "Google Sheets público", None
+            raise ValueError("Google Sheets está en modo privado, pero faltan las credenciales de google_service_account en Secrets.")
+        except Exception as exc:
+            try:
+                data = load_excel_from_path(str(LOCAL_EXCEL_PATH))
+                return data, "Excel local de respaldo", str(exc)
+            except Exception as local_exc:
+                st.error(
+                    "No pude leer Google Sheets ni el Excel local de respaldo. "
+                    f"Error Google: {exc}. Error Excel local: {local_exc}"
+                )
+                st.stop()
+
+    try:
+        data = load_excel_from_path(str(LOCAL_EXCEL_PATH))
+        return data, "Excel local", None
+    except Exception as exc:
+        st.error(f"No pude leer el Excel local: {exc}")
+        st.stop()
+
+
+# =========================
+# Preparación de datos
+# =========================
 def ensure_columns(df: pd.DataFrame, required: list[str], sheet_name: str) -> None:
     missing = [c for c in required if c not in df.columns]
     if missing:
         st.error(f"A la hoja '{sheet_name}' le faltan estas columnas: {', '.join(missing)}")
         st.stop()
+
+
+def parse_date_value(value):
+    if pd.isna(value) or value == "":
+        return None
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        # En Google Sheets normalmente llega como texto dd/mm/yyyy o yyyy-mm-dd.
+        return pd.to_datetime(value, dayfirst=True, errors="coerce").date()
+    except Exception:
+        return None
 
 
 def get_config(config_df: pd.DataFrame) -> dict:
@@ -197,44 +296,26 @@ def get_config(config_df: pd.DataFrame) -> dict:
 
     ensure_columns(config_df, ["Parametro", "Valor"], "Configuracion")
 
+    params = {}
     for _, row in config_df.iterrows():
         key = str(row.get("Parametro", "")).strip()
         value = row.get("Valor")
-        if key == "CantidadGrupos" and pd.notna(value):
-            cfg[key] = int(value)
-        elif key == "GrupoReferencia" and pd.notna(value):
-            cfg[key] = int(value)
-        elif key == "FechaReferenciaSemana" and pd.notna(value):
-            if isinstance(value, pd.Timestamp):
-                cfg[key] = value.date()
-            elif isinstance(value, datetime):
-                cfg[key] = value.date()
-            elif isinstance(value, date):
-                cfg[key] = value
-            else:
-                cfg[key] = pd.to_datetime(value).date()
+        if key:
+            params[key] = value
+
+    if pd.notna(params.get("CantidadGrupos")) and str(params.get("CantidadGrupos")).strip() != "":
+        cfg["CantidadGrupos"] = int(float(params["CantidadGrupos"]))
+
+    base_date = params.get("FechaBaseRotacion", params.get("FechaReferenciaSemana"))
+    parsed_base_date = parse_date_value(base_date)
+    if parsed_base_date:
+        cfg["FechaReferenciaSemana"] = parsed_base_date
+
+    base_group = params.get("GrupoBaseRotacion", params.get("GrupoReferencia"))
+    if pd.notna(base_group) and str(base_group).strip() != "":
+        cfg["GrupoReferencia"] = int(float(base_group))
 
     return cfg
-
-
-def start_of_week_sunday(d: date) -> date:
-    return d - timedelta(days=(d.weekday() + 1) % 7)
-
-
-def active_group_for_week(week_start: date, cfg: dict) -> int:
-    ref_week = start_of_week_sunday(cfg["FechaReferenciaSemana"])
-    weeks_diff = (week_start - ref_week).days // 7
-    total_groups = int(cfg["CantidadGrupos"])
-    ref_group = int(cfg["GrupoReferencia"])
-    return ((ref_group - 1 + weeks_diff) % total_groups) + 1
-
-
-def month_weeks(year: int, month: int) -> list[list[date | None]]:
-    cal = calendar.Calendar(firstweekday=6)  # domingo
-    weeks = []
-    for week in cal.monthdatescalendar(year, month):
-        weeks.append([d if d.month == month else None for d in week])
-    return weeks
 
 
 def prepare_data(data: dict):
@@ -253,7 +334,7 @@ def prepare_data(data: dict):
     )
 
     registro = registro.copy()
-    registro["Fecha"] = pd.to_datetime(registro["Fecha"], errors="coerce").dt.date
+    registro["Fecha"] = registro["Fecha"].apply(parse_date_value)
     registro["TipoRegistro"] = registro["TipoRegistro"].fillna("").astype(str).str.strip()
     registro["ServicioActividad"] = registro["ServicioActividad"].fillna("").astype(str).str.strip()
     registro["Servidor"] = registro["Servidor"].fillna("").astype(str).str.strip()
@@ -275,6 +356,26 @@ def prepare_data(data: dict):
 
     cfg = get_config(config)
     return servidores, servicios, estados, registro, cfg
+
+
+# =========================
+# Lógica de calendario
+# =========================
+def start_of_week_sunday(d: date) -> date:
+    return d - timedelta(days=(d.weekday() + 1) % 7)
+
+
+def active_group_for_week(week_start: date, cfg: dict) -> int:
+    ref_week = start_of_week_sunday(cfg["FechaReferenciaSemana"])
+    weeks_diff = (week_start - ref_week).days // 7
+    total_groups = max(int(cfg["CantidadGrupos"]), 1)
+    ref_group = int(cfg["GrupoReferencia"])
+    return ((ref_group - 1 + weeks_diff) % total_groups) + 1
+
+
+def month_weeks_full(year: int, month: int) -> list[list[date]]:
+    cal = calendar.Calendar(firstweekday=6)
+    return cal.monthdatescalendar(year, month)
 
 
 def registros_del_dia(registro: pd.DataFrame, d: date) -> pd.DataFrame:
@@ -310,55 +411,48 @@ def servidores_grupo(servidores: pd.DataFrame, group_number: int) -> list[str]:
     return filtered["Servidor"].dropna().astype(str).tolist()
 
 
-def render_service_expanders(servicios_dia: pd.DataFrame):
-    for servicio, group in servicios_dia.groupby("ServicioActividad", sort=False):
-        if not str(servicio).strip():
-            continue
-        with st.expander(f"{servicio} ({len(group)})", expanded=False):
-            for _, row in group.iterrows():
-                servidor = row["Servidor"] if row["Servidor"] else "Sin servidor asignado"
-                obs = f" — {row['Observaciones']}" if row["Observaciones"] else ""
-                st.markdown(f'<div class="person">• <b>{servidor}</b>{obs}</div>', unsafe_allow_html=True)
+def dia_nombre(d: date) -> str:
+    return DIAS_ES[(d.weekday() + 1) % 7]
 
 
-def render_activities(actividades_dia: pd.DataFrame):
-    if actividades_dia.empty:
-        return
-    st.markdown('<div class="section-title">Actividades</div>', unsafe_allow_html=True)
-    for _, row in actividades_dia.iterrows():
-        act = row["ServicioActividad"]
-        estado = f" · {row['Estado']}" if row["Estado"] else ""
-        obs = f" · {row['Observaciones']}" if row["Observaciones"] else ""
-        st.markdown(f'<span class="activity">{act}{estado}{obs}</span>', unsafe_allow_html=True)
+def render_day_card(d: date, selected_month: int, registro: pd.DataFrame):
+    regs = registros_del_dia(registro, d)
+    servicios = regs[regs["TipoRegistro"].str.lower() == "servicio"]
+    actividades = regs[regs["TipoRegistro"].str.lower() == "actividad"]
+    duplicados = detectar_duplicados_dia(regs)
 
+    outside_class = " outside-month" if d.month != selected_month else ""
+    today_label = '<span class="today-pill">Hoy</span>' if d == date.today() else ""
 
-def render_day_card(d: date | None, registro: pd.DataFrame):
     with st.container(border=True):
-        if d is None:
-            st.markdown('<div class="day-header-muted">&nbsp;</div>', unsafe_allow_html=True)
-            st.markdown('<div class="small-muted">&nbsp;</div>', unsafe_allow_html=True)
-            return
-
-        regs = registros_del_dia(registro, d)
-        servicios_dia = regs[regs["TipoRegistro"].str.lower() == "servicio"]
-        actividades_dia = regs[regs["TipoRegistro"].str.lower() == "actividad"]
-        duplicados = detectar_duplicados_dia(regs)
-
         st.markdown(
-            f'<div class="day-header">{day_name_es(d)} {d.day:02d}</div>',
+            f'<div class="date-header{outside_class}">{dia_nombre(d)} {d.day:02d}/{d.month:02d}{today_label}</div>',
             unsafe_allow_html=True,
         )
 
         if not duplicados.empty:
-            nombres = ", ".join(duplicados["Servidor"].astype(str).tolist())
-            st.markdown(f'<span class="alert-chip">⚠ Doble privilegio: {nombres}</span>', unsafe_allow_html=True)
-        elif not regs.empty:
-            st.markdown('<span class="ok-chip">Con registros</span>', unsafe_allow_html=True)
+            st.markdown('<span class="alert-chip">⚠ Doble privilegio</span>', unsafe_allow_html=True)
 
-        if not servicios_dia.empty:
-            render_service_expanders(servicios_dia)
+        if not servicios.empty:
+            for servicio, group in servicios.groupby("ServicioActividad", sort=False):
+                if not str(servicio).strip():
+                    continue
+                with st.expander(f"{servicio} · {len(group)}", expanded=False):
+                    for _, row in group.iterrows():
+                        servidor = row["Servidor"] if row["Servidor"] else "Sin servidor asignado"
+                        obs = f" — {row['Observaciones']}" if row["Observaciones"] else ""
+                        st.markdown(f'<div class="person-line">• {servidor}{obs}</div>', unsafe_allow_html=True)
 
-        render_activities(actividades_dia)
+        if not actividades.empty:
+            st.markdown('<div class="activity-title">Actividades</div>', unsafe_allow_html=True)
+            for _, row in actividades.iterrows():
+                actividad = row["ServicioActividad"] if row["ServicioActividad"] else "Actividad sin nombre"
+                estado = f" · {row['Estado']}" if row["Estado"] else ""
+                obs = f" — {row['Observaciones']}" if row["Observaciones"] else ""
+                st.markdown(
+                    f'<span class="activity-chip">{actividad}{estado}{obs}</span>',
+                    unsafe_allow_html=True,
+                )
 
         if regs.empty:
             st.markdown('<div class="small-muted">Sin registros</div>', unsafe_allow_html=True)
@@ -367,124 +461,69 @@ def render_day_card(d: date | None, registro: pd.DataFrame):
 # =========================
 # Interfaz
 # =========================
-st.markdown('<div class="main-title">Calendario de Servicios de Iglesia</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="subtitle">Vista mensual alimentada desde Excel, con grupos semanales, servicios expandibles, actividades y alertas por doble asignación.</div>',
-    unsafe_allow_html=True,
-)
+st.markdown('<div class="oasis-title">Calendario Actividades Oasis</div>', unsafe_allow_html=True)
 
-source_file = "calendario_iglesia_datos.xlsx"
-
-try:
-    modified_time = os.path.getmtime(source_file)
-    data = load_excel(source_file, modified_time)
-except FileNotFoundError:
-    st.error(
-        "No encontré el archivo 'calendario_iglesia_datos.xlsx'. "
-        "Debe estar en la misma carpeta que app.py."
-    )
-    st.stop()
-except Exception as e:
-    st.error(f"No pude leer el Excel. Revisa que no esté dañado y que sea .xlsx válido. Detalle: {e}")
-    st.stop()
-
-servidores_df, servicios_df, estados_df, registro_df, cfg = prepare_data(data)
-
+filter_left, filter_mid, filter_right = st.columns([1, 1, 4])
 today = date.today()
+with filter_left:
+    year = st.number_input("Año", min_value=2024, max_value=2035, value=today.year, step=1)
+with filter_mid:
+    month = st.selectbox(
+        "Mes",
+        options=list(MESES_ES.keys()),
+        index=today.month - 1,
+        format_func=lambda m: MESES_ES[m],
+    )
+
+with st.spinner("Cargando calendario..."):
+    data, data_source, source_error = load_data_with_fallback()
+    servidores_df, servicios_df, estados_df, registro_df, cfg = prepare_data(data)
 
 with st.sidebar:
-    st.header("📌 Información")
-    st.write("La app lee los datos desde el archivo:")
-    st.code(source_file)
-    st.caption("Para actualizar servicios o actividades, edita el Excel y sube los cambios a GitHub.")
+    st.header("📁 Fuente de datos")
+    if source_error:
+        st.markdown(
+            f'<div class="source-warn">Usando respaldo local.<br>Google Sheets no cargó.</div>',
+            unsafe_allow_html=True,
+        )
+        with st.expander("Ver detalle técnico", expanded=False):
+            st.write(source_error)
+    else:
+        st.markdown(f'<div class="source-ok">Leyendo desde:<br>{data_source}</div>', unsafe_allow_html=True)
 
     st.divider()
-    st.header("⚙️ Rotación de grupos")
+    st.header("⚙️ Rotación")
     st.write(f"Cantidad de grupos: **{cfg['CantidadGrupos']}**")
-    st.write(f"Semana referencia: **{cfg['FechaReferenciaSemana'].strftime('%d/%m/%Y')}**")
-    st.write(f"Grupo referencia: **#{cfg['GrupoReferencia']}**")
+    st.write(f"Semana base: **{cfg['FechaReferenciaSemana'].strftime('%d/%m/%Y')}**")
+    st.write(f"Grupo base: **#{cfg['GrupoReferencia']}**")
 
     current_week_start = start_of_week_sunday(today)
     current_group = active_group_for_week(current_week_start, cfg)
     st.success(f"Esta semana sirve el Grupo #{current_group}")
-    st.caption("Para cambiar la rotación, edita la hoja 'Configuracion' del Excel.")
 
-# Selector compacto arriba
-with st.container():
-    st.markdown('<div class="top-selector-card">', unsafe_allow_html=True)
-    sel_col1, sel_col2, sel_col3, sel_col4 = st.columns([1.1, 0.9, 1.2, 4.8])
-    with sel_col1:
-        month = st.selectbox(
-            "Mes",
-            options=list(MESES_ES.keys()),
-            index=today.month - 1,
-            format_func=lambda m: MESES_ES[m],
-            label_visibility="visible",
-        )
-    with sel_col2:
-        year = st.number_input("Año", min_value=2024, max_value=2035, value=today.year, step=1)
-    with sel_col3:
-        st.write("")
-        st.write(f"**{MESES_ES[int(month)]} {int(year)}**")
-    with sel_col4:
-        st.write("")
-        st.caption("Haz clic en cada etiqueta de servicio dentro del día para ver las personas asignadas.")
-    st.markdown('</div>', unsafe_allow_html=True)
+st.markdown(f"### {MESES_ES[int(month)]} {int(year)}")
 
-first_day = date(int(year), int(month), 1)
-last_day = date(int(year), int(month), calendar.monthrange(int(year), int(month))[1])
-registro_mes = registro_df[(registro_df["Fecha"] >= first_day) & (registro_df["Fecha"] <= last_day)].copy()
-
-duplicados_mes = []
-for d in pd.date_range(first_day, last_day, freq="D"):
-    dup = detectar_duplicados_dia(registros_del_dia(registro_df, d.date()))
-    for _, row in dup.iterrows():
-        duplicados_mes.append(
-            {
-                "Fecha": d.date(),
-                "Servidor": row["Servidor"],
-                "Cantidad": row["Cantidad"],
-                "Privilegios": row["Privilegios"],
-            }
-        )
-
-metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-metric_col1.metric("Registros", len(registro_mes))
-metric_col2.metric("Servicios", len(registro_mes[registro_mes["TipoRegistro"].str.lower() == "servicio"]))
-metric_col3.metric("Actividades", len(registro_mes[registro_mes["TipoRegistro"].str.lower() == "actividad"]))
-metric_col4.metric("Alertas", len(duplicados_mes))
-
-if duplicados_mes:
-    with st.expander("⚠ Alertas de doble privilegio del mes", expanded=False):
-        st.dataframe(pd.DataFrame(duplicados_mes), use_container_width=True, hide_index=True)
-
-# Encabezado de días
-header_cols = st.columns(7)
-for i, day_name in enumerate(DIAS_ES):
-    header_cols[i].markdown(f'<div class="day-name-head">{day_name}</div>', unsafe_allow_html=True)
-
-weeks = month_weeks(int(year), int(month))
+weeks = month_weeks_full(int(year), int(month))
 for week in weeks:
-    visible_dates = [d for d in week if d is not None]
-    week_start = start_of_week_sunday(visible_dates[0]) if visible_dates else start_of_week_sunday(first_day)
+    week_start = week[0]
     active_group = active_group_for_week(week_start, cfg)
     members = servidores_grupo(servidores_df, active_group)
 
-    week_label, group_members = st.columns([4.5, 1.2])
+    week_label, group_members = st.columns([4.4, 1.4])
     with week_label:
         st.markdown(
-            f'<div class="week-group">Semana {week_start.strftime("%d/%m/%Y")} al {(week_start + timedelta(days=6)).strftime("%d/%m/%Y")} · Grupo #{active_group}</div>',
+            f'<div class="week-group">Semana {week_start.strftime("%d/%m/%Y")} al {(week_start + timedelta(days=6)).strftime("%d/%m/%Y")} · Grupo #{active_group} con privilegio</div>',
             unsafe_allow_html=True,
         )
     with group_members:
-        with st.expander(f"Grupo #{active_group}", expanded=False):
+        with st.expander(f"Servidores Grupo #{active_group}", expanded=False):
             if members:
-                for m in members:
-                    st.write(f"• {m}")
+                for member in members:
+                    st.write(f"• {member}")
             else:
-                st.info("Sin servidores vinculados.")
+                st.info("Aún no hay servidores vinculados a este grupo.")
 
     day_cols = st.columns(7)
     for i, d in enumerate(week):
         with day_cols[i]:
-            render_day_card(d, registro_df)
+            render_day_card(d, int(month), registro_df)

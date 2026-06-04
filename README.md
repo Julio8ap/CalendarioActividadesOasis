@@ -1,80 +1,133 @@
-# Calendario de Servicios de Iglesia
+# Calendario Actividades Oasis
 
-Aplicación en Python con Streamlit para visualizar un calendario mensual de servicios, actividades y grupos de servidores de la iglesia.
+Aplicación web en Streamlit para visualizar el calendario mensual de servicios, actividades y grupos de servicio de la iglesia.
 
-## Archivos del proyecto
+## Archivos principales
 
-- `app.py`: aplicación principal.
-- `calendario_iglesia_datos.xlsx`: base de datos en Excel.
-- `requirements.txt`: librerías necesarias para Streamlit Cloud.
+- `app.py`: aplicación Streamlit.
+- `calendario_iglesia_datos.xlsx`: respaldo local de datos.
+- `requirements.txt`: librerías necesarias.
 - `README.md`: instrucciones.
 
-## Cómo funciona
+## Hojas necesarias en Google Sheets o Excel
 
-La app lee directamente el archivo `calendario_iglesia_datos.xlsx`. No se muestra opción pública para subir archivos desde la página, porque la administración se realiza editando el Excel y subiendo los cambios al repositorio de GitHub.
+La estructura debe mantenerse igual:
 
-## Hojas principales del Excel
+- `Lista Servidores`
+- `Servidores`
+- `Servicios`
+- `Estados`
+- `Meses`
+- `Registro Servicios`
+- `Configuracion`
 
-- `Lista Servidores`: listado oficial de nombres.
-- `Servidores`: vincula cada servidor con su grupo de servicio.
-- `Servicios`: catálogo de servicios o privilegios disponibles.
-- `Estados`: estados para actividades.
-- `Registro Servicios`: alimenta el calendario.
-- `Configuracion`: controla la rotación semanal de grupos.
+## Opción intermedia de datos
 
-## Registro Servicios
+La app intenta leer primero desde Google Sheets. Si Google Sheets no está configurado o falla, usa el archivo local `calendario_iglesia_datos.xlsx` como respaldo.
 
-Cada fila representa un servicio o actividad.
+## Configuración de Google Sheets privado
 
-Columnas esperadas:
+### 1. Subir el Excel a Google Drive
 
-- `Fecha`
-- `TipoRegistro`: usar `Servicio` o `Actividad`
-- `ServicioActividad`
-- `Servidor`
-- `Estado`
-- `Observaciones`
+1. Entra a Google Drive.
+2. Sube `calendario_iglesia_datos.xlsx`.
+3. Ábrelo con Google Sheets.
+4. Revisa que las pestañas tengan exactamente los mismos nombres.
 
-Notas:
+### 2. Crear una cuenta de servicio en Google Cloud
 
-- Para `Servicio`, la app muestra la etiqueta del servicio dentro del día y permite expandirla para ver servidores.
-- Para `Actividad`, la app muestra la actividad directamente dentro del día y conserva el estado.
-- El estado ya no se muestra en los servicios; queda únicamente para actividades.
-- Si una persona aparece en dos servicios el mismo día, se muestra alerta de doble privilegio.
+1. Entra a Google Cloud Console.
+2. Crea o selecciona un proyecto.
+3. Activa Google Sheets API.
+4. Crea una Service Account.
+5. Genera una clave JSON.
+6. Copia el correo de la Service Account.
+7. Comparte tu Google Sheets con ese correo como lector.
 
-## Rotación de grupos
+### 3. Agregar Secrets en Streamlit Community Cloud
 
-La app usa la hoja `Configuracion` con estos parámetros:
+En tu app publicada:
 
-- `CantidadGrupos`: 5
-- `FechaReferenciaSemana`: 31/05/2026
-- `GrupoReferencia`: 5
+1. Entra a Manage app.
+2. Abre Settings.
+3. Entra a Secrets.
+4. Agrega esta estructura:
 
-Con esta base, cada domingo la app calcula automáticamente el grupo activo y lo cicla del 1 al 5.
+```toml
+[google_sheets]
+enabled = true
+spreadsheet_id = "PEGA_AQUI_EL_ID_DEL_GOOGLE_SHEETS"
+mode = "private"
 
-## Cómo ejecutar localmente
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
+[google_service_account]
+type = "service_account"
+project_id = "..."
+private_key_id = "..."
+private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+client_email = "..."
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "..."
+universe_domain = "googleapis.com"
 ```
 
-## Cómo actualizar la app después de cambiar código o Excel
+El `spreadsheet_id` es la parte del enlace que aparece entre `/d/` y `/edit`.
 
-1. Guarda los cambios en `app.py` o en `calendario_iglesia_datos.xlsx`.
-2. Abre VS Code en la carpeta del proyecto.
-3. Abre la terminal.
-4. Ejecuta:
+Ejemplo:
+
+```text
+https://docs.google.com/spreadsheets/d/ESTE_ES_EL_ID/edit
+```
+
+## Opción Google Sheets público
+
+Si quieres una configuración más rápida, puedes compartir el Google Sheets como lectura pública y usar:
+
+```toml
+[google_sheets]
+enabled = true
+spreadsheet_id = "PEGA_AQUI_EL_ID_DEL_GOOGLE_SHEETS"
+mode = "public"
+```
+
+En este modo no necesitas `[google_service_account]`, pero cualquier persona con el enlace del Sheet podría verlo.
+
+## Modo respaldo local
+
+Si no configuras Secrets, la app usará automáticamente:
+
+```text
+calendario_iglesia_datos.xlsx
+```
+
+Este archivo debe estar en la misma carpeta que `app.py`.
+
+## Actualizar el repositorio
+
+Después de reemplazar archivos en VS Code:
 
 ```bash
 git status
 git add .
-git commit -m "Actualizar calendario de servicios"
+git commit -m "Actualizar calendario Oasis"
 git push
 ```
 
-Streamlit Community Cloud detectará el cambio en GitHub y actualizará la app publicada.
+Streamlit actualizará la app desde GitHub.
 
-## Recomendación
+## Cambios visuales incluidos
 
-Cuando solo cambies datos del calendario, edita únicamente `calendario_iglesia_datos.xlsx`, guarda el archivo y súbelo con `git add .`, `git commit` y `git push`.
+- Título superior: `Calendario Actividades Oasis`.
+- Filtros compactos de año y mes en la parte superior.
+- Sin descripción inicial.
+- Sin métricas de resumen.
+- Sin selector de días.
+- Sin fila independiente con nombres de días.
+- Cada fecha muestra su día y fecha dentro del recuadro.
+- Las fechas fuera del mes se muestran para mantener una cuadrícula completa y simétrica.
+- Los servicios aparecen como etiquetas expandibles dentro de cada fecha.
+- El estado se muestra únicamente en actividades.
+- Se mantiene la alerta de doble privilegio.
+- Se mantiene la rotación semanal de grupos.
