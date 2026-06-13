@@ -37,6 +37,11 @@ st.markdown(
         --oasis-alert-text: #991b1b;
         --oasis-activity-bg: #fef3c7;
         --oasis-activity-text: #92400e;
+        --service-bg: rgba(20,184,166,0.07);
+        --service-border: var(--oasis-soft-border);
+        --service-text: var(--oasis-primary);
+        --service-marker: var(--oasis-primary-2);
+        --service-body: var(--oasis-text);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -57,6 +62,11 @@ st.markdown(
             --oasis-alert-text: #fecaca;
             --oasis-activity-bg: #713f12;
             --oasis-activity-text: #fde68a;
+            --service-bg: rgba(45,212,191,0.1);
+            --service-border: var(--oasis-soft-border);
+            --service-text: var(--oasis-primary);
+            --service-marker: var(--oasis-primary-2);
+            --service-body: var(--oasis-text);
         }
     }
 
@@ -228,9 +238,9 @@ st.markdown(
 
     .service-details {
         margin: 0.28rem 0;
-        border: 1px solid var(--oasis-soft-border);
+        border: 1px solid var(--service-border);
         border-radius: 0.75rem;
-        background: rgba(20,184,166,0.07);
+        background: var(--service-bg);
         overflow: hidden;
     }
 
@@ -238,13 +248,147 @@ st.markdown(
         cursor: pointer;
         padding: 0.35rem 0.45rem;
         list-style: none;
-        color: var(--oasis-primary);
+        color: var(--service-text);
         font-weight: 900;
         font-size: 0.85rem;
     }
     .service-details summary::-webkit-details-marker {display:none;}
-    .service-details summary:before { content: "▸ "; color: var(--oasis-primary-2); }
+    .service-details summary:before { content: "▸ "; color: var(--service-marker); }
     .service-details[open] summary:before { content: "▾ "; }
+
+    .service-details .person-list {
+        color: var(--service-body);
+    }
+
+    .service-tone-1 {
+        --service-bg: #eef6ff;
+        --service-border: #bfdbfe;
+        --service-text: #1d4ed8;
+        --service-marker: #3b82f6;
+        --service-body: #1e3a8a;
+    }
+
+    .service-tone-2 {
+        --service-bg: #f5f3ff;
+        --service-border: #ddd6fe;
+        --service-text: #6d28d9;
+        --service-marker: #8b5cf6;
+        --service-body: #4c1d95;
+    }
+
+    .service-tone-3 {
+        --service-bg: #fff1f2;
+        --service-border: #fecdd3;
+        --service-text: #be123c;
+        --service-marker: #f43f5e;
+        --service-body: #881337;
+    }
+
+    .service-tone-4 {
+        --service-bg: #fffbeb;
+        --service-border: #fde68a;
+        --service-text: #a16207;
+        --service-marker: #d97706;
+        --service-body: #713f12;
+    }
+
+    .service-tone-5 {
+        --service-bg: #ecfdf5;
+        --service-border: #bbf7d0;
+        --service-text: #047857;
+        --service-marker: #10b981;
+        --service-body: #064e3b;
+    }
+
+    .service-tone-6 {
+        --service-bg: #ecfeff;
+        --service-border: #a5f3fc;
+        --service-text: #0e7490;
+        --service-marker: #06b6d4;
+        --service-body: #164e63;
+    }
+
+    .service-tone-7 {
+        --service-bg: #f8fafc;
+        --service-border: #cbd5e1;
+        --service-text: #475569;
+        --service-marker: #64748b;
+        --service-body: #334155;
+    }
+
+    .service-tone-8 {
+        --service-bg: #f7fee7;
+        --service-border: #d9f99d;
+        --service-text: #4d7c0f;
+        --service-marker: #65a30d;
+        --service-body: #365314;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .service-tone-1 {
+            --service-bg: #172554;
+            --service-border: #1d4ed8;
+            --service-text: #bfdbfe;
+            --service-marker: #60a5fa;
+            --service-body: #dbeafe;
+        }
+
+        .service-tone-2 {
+            --service-bg: #2e1065;
+            --service-border: #6d28d9;
+            --service-text: #ddd6fe;
+            --service-marker: #a78bfa;
+            --service-body: #ede9fe;
+        }
+
+        .service-tone-3 {
+            --service-bg: #4c0519;
+            --service-border: #be123c;
+            --service-text: #fecdd3;
+            --service-marker: #fb7185;
+            --service-body: #ffe4e6;
+        }
+
+        .service-tone-4 {
+            --service-bg: #422006;
+            --service-border: #a16207;
+            --service-text: #fde68a;
+            --service-marker: #fbbf24;
+            --service-body: #fef3c7;
+        }
+
+        .service-tone-5 {
+            --service-bg: #052e16;
+            --service-border: #047857;
+            --service-text: #bbf7d0;
+            --service-marker: #34d399;
+            --service-body: #dcfce7;
+        }
+
+        .service-tone-6 {
+            --service-bg: #083344;
+            --service-border: #0e7490;
+            --service-text: #a5f3fc;
+            --service-marker: #22d3ee;
+            --service-body: #cffafe;
+        }
+
+        .service-tone-7 {
+            --service-bg: #1e293b;
+            --service-border: #475569;
+            --service-text: #cbd5e1;
+            --service-marker: #94a3b8;
+            --service-body: #f1f5f9;
+        }
+
+        .service-tone-8 {
+            --service-bg: #1a2e05;
+            --service-border: #4d7c0f;
+            --service-text: #d9f99d;
+            --service-marker: #a3e635;
+            --service-body: #ecfccb;
+        }
+    }
 
     .person-list {
         padding: 0 0.55rem 0.45rem 0.75rem;
@@ -592,6 +736,26 @@ def e(value) -> str:
     return html.escape(str(value))
 
 
+def key_text(value) -> str:
+    return str(value).strip().lower()
+
+
+def build_service_category_map(servicios: pd.DataFrame) -> dict[str, str]:
+    if servicios.empty:
+        return {}
+    return {
+        key_text(row["Servicio"]): str(row["Categoria"]).strip()
+        for _, row in servicios.iterrows()
+        if key_text(row["Servicio"])
+    }
+
+
+def service_tone_class(servicio: str, service_categories: dict[str, str]) -> str:
+    category = service_categories.get(key_text(servicio), "").strip() or servicio
+    tone_number = (sum(ord(char) for char in key_text(category)) % 8) + 1
+    return f"service-tone-{tone_number}"
+
+
 def day_name(d: date) -> str:
     return DIAS_ES[(d.weekday() + 1) % 7]
 
@@ -608,6 +772,7 @@ def render_day_card_html(
     selected_month: int,
     registro: pd.DataFrame,
     servidores: pd.DataFrame,
+    service_categories: dict[str, str],
     cfg: dict,
 ) -> str:
     regs = registros_del_dia(registro, d)
@@ -654,7 +819,8 @@ def render_day_card_html(
             servicio = str(servicio).strip()
             if not servicio:
                 continue
-            parts.append('<details class="service-details">')
+            tone_class = service_tone_class(servicio, service_categories)
+            parts.append(f'<details class="service-details {tone_class}">')
             parts.append(f'<summary>{e(servicio)}</summary>')
             parts.append('<div class="person-list">')
             for _, row in group.iterrows():
@@ -679,7 +845,14 @@ def render_day_card_html(
     return "".join(parts)
 
 
-def render_week(week: list[date], month: int, registro: pd.DataFrame, servidores: pd.DataFrame, cfg: dict) -> None:
+def render_week(
+    week: list[date],
+    month: int,
+    registro: pd.DataFrame,
+    servidores: pd.DataFrame,
+    service_categories: dict[str, str],
+    cfg: dict,
+) -> None:
     week_start = start_of_week_sunday(week[0])
     active_group = active_group_for_week(week_start, cfg)
     members = servidores_grupo(servidores, active_group)
@@ -700,7 +873,9 @@ def render_week(week: list[date], month: int, registro: pd.DataFrame, servidores
         unsafe_allow_html=True,
     )
 
-    cards = "".join(render_day_card_html(d, month, registro, servidores, cfg) for d in week)
+    cards = "".join(
+        render_day_card_html(d, month, registro, servidores, service_categories, cfg) for d in week
+    )
     st.markdown(f'<div class="calendar-grid">{cards}</div>', unsafe_allow_html=True)
 
 
@@ -722,6 +897,7 @@ except Exception as exc:
     st.stop()
 
 servidores_df, servicios_df, registro_df, cfg = prepare_data(data)
+service_categories = build_service_category_map(servicios_df)
 
 today = date.today()
 filter_col_1, filter_col_2, filter_col_3 = st.columns([0.65, 0.85, 4.5])
@@ -740,7 +916,7 @@ with filter_col_3:
 
 weeks = month_weeks_full(int(year), int(month))
 for week in weeks:
-    render_week(week, int(month), registro_df, servidores_df, cfg)
+    render_week(week, int(month), registro_df, servidores_df, service_categories, cfg)
 
 with st.sidebar:
     st.header("⚙️ Configuración")
