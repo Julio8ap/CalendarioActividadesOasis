@@ -277,11 +277,11 @@ st.markdown(
     }
 
     .service-tone-3 {
-        --service-bg: #fff1f2;
-        --service-border: #fecdd3;
-        --service-text: #be123c;
-        --service-marker: #f43f5e;
-        --service-body: #881337;
+        --service-bg: #f0fdfa;
+        --service-border: #99f6e4;
+        --service-text: #0f766e;
+        --service-marker: #14b8a6;
+        --service-body: #134e4a;
     }
 
     .service-tone-4 {
@@ -342,11 +342,11 @@ st.markdown(
         }
 
         .service-tone-3 {
-            --service-bg: #4c0519;
-            --service-border: #be123c;
-            --service-text: #fecdd3;
-            --service-marker: #fb7185;
-            --service-body: #ffe4e6;
+            --service-bg: #042f2e;
+            --service-border: #0f766e;
+            --service-text: #99f6e4;
+            --service-marker: #2dd4bf;
+            --service-body: #ccfbf1;
         }
 
         .service-tone-4 {
