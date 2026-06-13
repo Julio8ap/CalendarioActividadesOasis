@@ -176,14 +176,54 @@ st.markdown(
     }
 
     .alert-chip {
-        display: inline-block;
+        display: block;
         background: var(--oasis-alert-bg);
         color: var(--oasis-alert-text);
-        border-radius: 999px;
-        padding: 0.13rem 0.5rem;
+        border: 1px solid rgba(153, 27, 27, 0.22);
+        border-radius: 0.7rem;
         margin: 0.08rem 0 0.28rem 0;
         font-size: 0.75rem;
         font-weight: 900;
+        overflow: hidden;
+    }
+
+    .alert-chip summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 0.25rem 0.5rem;
+    }
+    .alert-chip summary::-webkit-details-marker {display:none;}
+    .alert-chip summary:before { content: "⚠ "; }
+
+    .alert-list {
+        padding: 0 0.55rem 0.45rem 0.75rem;
+        font-weight: 750;
+        line-height: 1.32;
+    }
+
+    .cleaning-details {
+        margin: 0.28rem 0;
+        border: 1px solid var(--oasis-soft-border);
+        border-radius: 0.75rem;
+        background: var(--oasis-blue-soft);
+        color: var(--oasis-blue-text);
+        overflow: hidden;
+    }
+
+    .cleaning-details summary {
+        cursor: pointer;
+        padding: 0.35rem 0.45rem;
+        list-style: none;
+        color: var(--oasis-blue-text);
+        font-weight: 900;
+        font-size: 0.85rem;
+    }
+    .cleaning-details summary::-webkit-details-marker {display:none;}
+    .cleaning-details summary:before { content: "▸ "; }
+    .cleaning-details[open] summary:before { content: "▾ "; }
+
+    .cleaning-details .person-list {
+        color: var(--oasis-blue-text);
     }
 
     .service-details {
@@ -405,6 +445,8 @@ def get_config(config_df: pd.DataFrame) -> dict:
         "CantidadGrupos": 5,
         "FechaBaseRotacion": date(2026, 5, 31),
         "GrupoBaseRotacion": 5,
+        "FechaBaseLimpieza": date(2026, 6, 13),
+        "GrupoBaseLimpieza": 3,
     }
     if config_df is None or config_df.empty:
         return cfg
@@ -422,11 +464,17 @@ def get_config(config_df: pd.DataFrame) -> dict:
     # Nombres actuales y compatibilidad con versiones anteriores
     date_value = params.get("FechaBaseRotacion", params.get("FechaReferenciaSemana"))
     group_value = params.get("GrupoBaseRotacion", params.get("GrupoReferencia"))
+    cleaning_date_value = params.get("FechaBaseLimpieza")
+    cleaning_group_value = params.get("GrupoBaseLimpieza")
 
     if date_value is not None and pd.notna(date_value):
         cfg["FechaBaseRotacion"] = parse_date_value(date_value, cfg["FechaBaseRotacion"])
     if group_value is not None and pd.notna(group_value):
         cfg["GrupoBaseRotacion"] = int(float(group_value))
+    if cleaning_date_value is not None and pd.notna(cleaning_date_value):
+        cfg["FechaBaseLimpieza"] = parse_date_value(cleaning_date_value, cfg["FechaBaseLimpieza"])
+    if cleaning_group_value is not None and pd.notna(cleaning_group_value):
+        cfg["GrupoBaseLimpieza"] = int(float(cleaning_group_value))
 
     return cfg
 
@@ -435,12 +483,24 @@ def start_of_week_sunday(d: date) -> date:
     return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
-def active_group_for_week(week_start: date, cfg: dict) -> int:
-    ref_week = start_of_week_sunday(cfg["FechaBaseRotacion"])
+def active_group_for_rotation(week_start: date, cfg: dict, date_key: str, group_key: str) -> int:
+    ref_week = start_of_week_sunday(cfg[date_key])
     weeks_diff = (week_start - ref_week).days // 7
     total_groups = max(1, int(cfg["CantidadGrupos"]))
-    ref_group = int(cfg["GrupoBaseRotacion"])
+    ref_group = int(cfg[group_key])
     return ((ref_group - 1 + weeks_diff) % total_groups) + 1
+
+
+def active_group_for_week(week_start: date, cfg: dict) -> int:
+    return active_group_for_rotation(week_start, cfg, "FechaBaseRotacion", "GrupoBaseRotacion")
+
+
+def active_cleaning_group_for_week(week_start: date, cfg: dict) -> int:
+    return active_group_for_rotation(week_start, cfg, "FechaBaseLimpieza", "GrupoBaseLimpieza")
+
+
+def is_saturday(d: date) -> bool:
+    return d.weekday() == 5
 
 
 def month_weeks_full(year: int, month: int) -> list[list[date]]:
@@ -487,13 +547,27 @@ def registros_del_dia(registro: pd.DataFrame, d: date) -> pd.DataFrame:
     return registro[registro["Fecha"] == d].copy()
 
 
-def detectar_duplicados_dia(regs_day: pd.DataFrame) -> pd.DataFrame:
+def detectar_duplicados_dia(regs_day: pd.DataFrame, extra_privilegios: list[dict] | None = None) -> pd.DataFrame:
     servicios_personas = regs_day[
         (regs_day["TipoRegistro"].str.lower() == "servicio")
         & (regs_day["Servidor"].str.strip() != "")
     ].copy()
-    if servicios_personas.empty:
+    rows = []
+    if not servicios_personas.empty:
+        rows.extend(
+            {
+                "Servidor": row["Servidor"],
+                "ServicioActividad": row["ServicioActividad"],
+            }
+            for _, row in servicios_personas.iterrows()
+        )
+    if extra_privilegios:
+        rows.extend(extra_privilegios)
+
+    if not rows:
         return pd.DataFrame(columns=["Servidor", "Cantidad", "Privilegios"])
+
+    servicios_personas = pd.DataFrame(rows)
     grouped = (
         servicios_personas.groupby("Servidor")
         .agg(
@@ -522,11 +596,29 @@ def day_name(d: date) -> str:
     return DIAS_ES[(d.weekday() + 1) % 7]
 
 
-def render_day_card_html(d: date, selected_month: int, registro: pd.DataFrame) -> str:
+def limpieza_del_dia(d: date, servidores: pd.DataFrame, cfg: dict) -> tuple[int | None, list[str]]:
+    if not is_saturday(d):
+        return None, []
+    cleaning_group = active_cleaning_group_for_week(start_of_week_sunday(d), cfg)
+    return cleaning_group, servidores_grupo(servidores, cleaning_group)
+
+
+def render_day_card_html(
+    d: date,
+    selected_month: int,
+    registro: pd.DataFrame,
+    servidores: pd.DataFrame,
+    cfg: dict,
+) -> str:
     regs = registros_del_dia(registro, d)
     servicios = regs[regs["TipoRegistro"].str.lower() == "servicio"]
     actividades = regs[regs["TipoRegistro"].str.lower() == "actividad"]
-    duplicados = detectar_duplicados_dia(regs)
+    cleaning_group, cleaning_members = limpieza_del_dia(d, servidores, cfg)
+    cleaning_privileges = [
+        {"Servidor": member, "ServicioActividad": f"Limpieza Grupo #{cleaning_group}"}
+        for member in cleaning_members
+    ]
+    duplicados = detectar_duplicados_dia(regs, cleaning_privileges)
     outside = " outside-month" if d.month != selected_month else ""
     month_tag = MESES_ES[d.month][:3]
 
@@ -536,10 +628,26 @@ def render_day_card_html(d: date, selected_month: int, registro: pd.DataFrame) -
     )
 
     if not duplicados.empty:
-        alerts = "; ".join(
-            f"{row['Servidor']} ({int(row['Cantidad'])})" for _, row in duplicados.iterrows()
+        alert_html = "".join(
+            f"<div>{e(row['Servidor'])}: {e(row['Privilegios'])}</div>"
+            for _, row in duplicados.iterrows()
         )
-        parts.append(f'<div class="alert-chip" title="{e(alerts)}">⚠ Doble privilegio</div>')
+        parts.append(
+            '<details class="alert-chip">'
+            '<summary>Doble privilegio</summary>'
+            f'<div class="alert-list">{alert_html}</div>'
+            '</details>'
+        )
+
+    if cleaning_group is not None:
+        cleaning_member_html = (
+            "".join(f'<div class="person-line">• {e(member)}</div>' for member in cleaning_members)
+            or '<div class="person-line">Sin servidores vinculados.</div>'
+        )
+        parts.append('<details class="cleaning-details">')
+        parts.append(f'<summary>Limpieza Grupo #{cleaning_group}</summary>')
+        parts.append(f'<div class="person-list">{cleaning_member_html}</div>')
+        parts.append('</details>')
 
     if not servicios.empty:
         for servicio, group in servicios.groupby("ServicioActividad", sort=False):
@@ -564,7 +672,7 @@ def render_day_card_html(d: date, selected_month: int, registro: pd.DataFrame) -
             parts.append(f'<div class="activity-chip">{e(act)}{e(obs)}{estado}</div>')
         parts.append('</div>')
 
-    if regs.empty:
+    if regs.empty and cleaning_group is None:
         parts.append('<div class="empty-text">Sin registros</div>')
 
     parts.append('</div>')
@@ -592,7 +700,7 @@ def render_week(week: list[date], month: int, registro: pd.DataFrame, servidores
         unsafe_allow_html=True,
     )
 
-    cards = "".join(render_day_card_html(d, month, registro) for d in week)
+    cards = "".join(render_day_card_html(d, month, registro, servidores, cfg) for d in week)
     st.markdown(f'<div class="calendar-grid">{cards}</div>', unsafe_allow_html=True)
 
 
@@ -640,7 +748,11 @@ with st.sidebar:
     st.write(f"Cantidad de grupos: **{cfg['CantidadGrupos']}**")
     st.write(f"Semana base: **{cfg['FechaBaseRotacion'].strftime('%d/%m/%Y')}**")
     st.write(f"Grupo base: **#{cfg['GrupoBaseRotacion']}**")
+    st.write(f"Sabado base limpieza: **{cfg['FechaBaseLimpieza'].strftime('%d/%m/%Y')}**")
+    st.write(f"Grupo base limpieza: **#{cfg['GrupoBaseLimpieza']}**")
     current_week_start = start_of_week_sunday(today)
     current_group = active_group_for_week(current_week_start, cfg)
+    current_cleaning_group = active_cleaning_group_for_week(current_week_start, cfg)
     st.success(f"Esta semana sirve el Grupo #{current_group}")
+    st.info(f"Este sabado limpia el Grupo #{current_cleaning_group}")
     st.caption("Los datos se administran desde Google Sheets o desde el Excel local de respaldo.")
