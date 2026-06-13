@@ -751,8 +751,10 @@ def build_service_category_map(servicios: pd.DataFrame) -> dict[str, str]:
 
 
 def service_tone_class(servicio: str, service_categories: dict[str, str]) -> str:
-    category = service_categories.get(key_text(servicio), "").strip() or servicio
-    tone_number = (sum(ord(char) for char in key_text(category)) % 8) + 1
+    category = key_text(service_categories.get(key_text(servicio), ""))
+    if category != "servicio":
+        return ""
+    tone_number = (sum(ord(char) for char in key_text(servicio)) % 8) + 1
     return f"service-tone-{tone_number}"
 
 
@@ -820,7 +822,8 @@ def render_day_card_html(
             if not servicio:
                 continue
             tone_class = service_tone_class(servicio, service_categories)
-            parts.append(f'<details class="service-details {tone_class}">')
+            details_class = f"service-details {tone_class}".strip()
+            parts.append(f'<details class="{details_class}">')
             parts.append(f'<summary>{e(servicio)}</summary>')
             parts.append('<div class="person-list">')
             for _, row in group.iterrows():
