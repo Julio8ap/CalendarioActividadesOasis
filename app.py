@@ -1,8 +1,11 @@
 import calendar
 import html
+import json
 import re
+from io import BytesIO
 from datetime import date, datetime, timedelta
 from urllib.parse import quote
+from urllib.request import urlopen
 
 import pandas as pd
 import streamlit as st
@@ -499,6 +502,61 @@ def _empty_if_unnamed(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def dataframe_from_sheet_rows(rows: list[list]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+
+    headers = []
+    for idx, header in enumerate(rows[0]):
+        header_text = str(header).strip()
+        headers.append(header_text if header_text else f"Unnamed: {idx}")
+
+    body = rows[1:]
+    width = len(headers)
+    normalized_rows = [
+        list(row[:width]) + [""] * max(0, width - len(row))
+        for row in body
+        if any(str(cell).strip() for cell in row)
+    ]
+    return _empty_if_unnamed(normalize_columns(pd.DataFrame(normalized_rows, columns=headers)))
+
+
+def load_public_google_sheet_values(spreadsheet_id: str, sheet: str) -> pd.DataFrame:
+    range_name = quote(f"'{sheet}'", safe="")
+    url = (
+        f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_name}"
+        "?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING"
+    )
+    with urlopen(url, timeout=20) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return dataframe_from_sheet_rows(payload.get("values", []))
+
+
+def load_public_google_sheet_csv(spreadsheet_id: str, sheet: str) -> pd.DataFrame:
+    url = (
+        f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?"
+        f"tqx=out:csv&sheet={quote(sheet)}"
+    )
+    return _empty_if_unnamed(normalize_columns(pd.read_csv(url)))
+
+
+def load_public_google_workbook_export(spreadsheet_id: str) -> dict:
+    url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=xlsx"
+    with urlopen(url, timeout=30) as response:
+        workbook_bytes = response.read()
+
+    xls = pd.ExcelFile(BytesIO(workbook_bytes))
+    data = {}
+    for sheet in SHEETS:
+        data[sheet] = _empty_if_unnamed(normalize_columns(pd.read_excel(xls, sheet_name=sheet)))
+    for sheet in OPTIONAL_SHEETS:
+        if sheet in xls.sheet_names:
+            data[sheet] = _empty_if_unnamed(normalize_columns(pd.read_excel(xls, sheet_name=sheet)))
+        else:
+            data[sheet] = pd.DataFrame()
+    return data
+
+
 @st.cache_data(show_spinner=False, ttl=180)
 def load_local_excel(path: str) -> dict:
     xls = pd.ExcelFile(path)
@@ -510,22 +568,25 @@ def load_local_excel(path: str) -> dict:
 
 @st.cache_data(show_spinner=False, ttl=180)
 def load_public_google_sheet(spreadsheet_id: str) -> dict:
+    try:
+        return load_public_google_workbook_export(spreadsheet_id)
+    except Exception:
+        pass
+
     data = {}
     for sheet in SHEETS:
-        url = (
-            f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?"
-            f"tqx=out:csv&sheet={quote(sheet)}"
-        )
-        data[sheet] = _empty_if_unnamed(normalize_columns(pd.read_csv(url)))
+        try:
+            data[sheet] = load_public_google_sheet_values(spreadsheet_id, sheet)
+        except Exception:
+            data[sheet] = load_public_google_sheet_csv(spreadsheet_id, sheet)
     for sheet in OPTIONAL_SHEETS:
         try:
-            url = (
-                f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?"
-                f"tqx=out:csv&sheet={quote(sheet)}"
-            )
-            data[sheet] = _empty_if_unnamed(normalize_columns(pd.read_csv(url)))
+            data[sheet] = load_public_google_sheet_values(spreadsheet_id, sheet)
         except Exception:
-            data[sheet] = pd.DataFrame()
+            try:
+                data[sheet] = load_public_google_sheet_csv(spreadsheet_id, sheet)
+            except Exception:
+                data[sheet] = pd.DataFrame()
     return data
 
 
@@ -545,13 +606,13 @@ def load_private_google_sheet(spreadsheet_id: str, service_account_info: dict) -
     data = {}
     for sheet in SHEETS:
         ws = workbook.worksheet(sheet)
-        values = ws.get_all_records()
-        data[sheet] = _empty_if_unnamed(normalize_columns(pd.DataFrame(values)))
+        values = ws.get_all_values()
+        data[sheet] = dataframe_from_sheet_rows(values)
     for sheet in OPTIONAL_SHEETS:
         try:
             ws = workbook.worksheet(sheet)
-            values = ws.get_all_records()
-            data[sheet] = _empty_if_unnamed(normalize_columns(pd.DataFrame(values)))
+            values = ws.get_all_values()
+            data[sheet] = dataframe_from_sheet_rows(values)
         except Exception:
             data[sheet] = pd.DataFrame()
     return data
