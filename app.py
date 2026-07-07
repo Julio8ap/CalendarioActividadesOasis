@@ -1,5 +1,6 @@
 import calendar
 import html
+import re
 from datetime import date, datetime, timedelta
 from urllib.parse import quote
 
@@ -479,6 +480,7 @@ SHEETS = [
     "Registro Servicios",
     "Configuracion",
 ]
+OPTIONAL_SHEETS = ["Ventas Martes"]
 LOCAL_EXCEL = "calendario_iglesia_datos.xlsx"
 
 
@@ -515,6 +517,15 @@ def load_public_google_sheet(spreadsheet_id: str) -> dict:
             f"tqx=out:csv&sheet={quote(sheet)}"
         )
         data[sheet] = _empty_if_unnamed(normalize_columns(pd.read_csv(url)))
+    for sheet in OPTIONAL_SHEETS:
+        try:
+            url = (
+                f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?"
+                f"tqx=out:csv&sheet={quote(sheet)}"
+            )
+            data[sheet] = _empty_if_unnamed(normalize_columns(pd.read_csv(url)))
+        except Exception:
+            data[sheet] = pd.DataFrame()
     return data
 
 
@@ -536,6 +547,13 @@ def load_private_google_sheet(spreadsheet_id: str, service_account_info: dict) -
         ws = workbook.worksheet(sheet)
         values = ws.get_all_records()
         data[sheet] = _empty_if_unnamed(normalize_columns(pd.DataFrame(values)))
+    for sheet in OPTIONAL_SHEETS:
+        try:
+            ws = workbook.worksheet(sheet)
+            values = ws.get_all_records()
+            data[sheet] = _empty_if_unnamed(normalize_columns(pd.DataFrame(values)))
+        except Exception:
+            data[sheet] = pd.DataFrame()
     return data
 
 
@@ -657,6 +675,7 @@ def prepare_data(data: dict):
     servicios = normalize_columns(data.get("Servicios", pd.DataFrame()))
     registro = normalize_columns(data.get("Registro Servicios", pd.DataFrame()))
     config = normalize_columns(data.get("Configuracion", pd.DataFrame()))
+    ventas_martes = normalize_columns(data.get("Ventas Martes", pd.DataFrame()))
 
     ensure_columns(servidores, ["Servidor", "Grupo"], "Servidores")
     ensure_columns(servicios, ["Servicio", "Categoria"], "Servicios")
@@ -684,7 +703,19 @@ def prepare_data(data: dict):
     servicios["Servicio"] = servicios["Servicio"].fillna("").astype(str).str.strip()
     servicios["Categoria"] = servicios["Categoria"].fillna("").astype(str).str.strip()
 
-    return servidores, servicios, registro, get_config(config)
+    if ventas_martes.empty:
+        ventas_martes = pd.DataFrame(columns=["Servidor", "Grupo", "Activo", "Notas"])
+    else:
+        ensure_columns(ventas_martes, ["Servidor", "Grupo"], "Ventas Martes")
+        ventas_martes = ventas_martes.copy()
+        ventas_martes["Servidor"] = ventas_martes["Servidor"].fillna("").astype(str).str.strip()
+        ventas_martes["Grupo"] = ventas_martes["Grupo"].fillna("").astype(str).str.strip()
+        if "Activo" in ventas_martes.columns:
+            ventas_martes["Activo"] = ventas_martes["Activo"].fillna("Sí").astype(str).str.strip()
+        else:
+            ventas_martes["Activo"] = "Sí"
+
+    return servidores, servicios, registro, ventas_martes, get_config(config)
 
 
 def registros_del_dia(registro: pd.DataFrame, d: date) -> pd.DataFrame:
@@ -758,6 +789,29 @@ def service_tone_class(servicio: str, service_categories: dict[str, str]) -> str
     return f"service-tone-{tone_number}"
 
 
+def is_ventas_martes(servicio: str) -> bool:
+    return key_text(servicio) == "ventas martes"
+
+
+def group_number_from_text(value) -> int | None:
+    match = re.search(r"\d+", str(value))
+    if not match:
+        return None
+    return int(match.group(0))
+
+
+def ventas_martes_members(ventas_martes: pd.DataFrame, group_label) -> list[str]:
+    group_number = group_number_from_text(group_label)
+    if group_number is None or ventas_martes.empty:
+        return []
+    filtered = ventas_martes[
+        (ventas_martes["Servidor"] != "")
+        & (ventas_martes["Grupo"].map(group_number_from_text) == group_number)
+        & (~ventas_martes["Activo"].str.lower().isin(["no", "inactivo", "false", "0"]))
+    ]
+    return filtered["Servidor"].dropna().astype(str).tolist()
+
+
 def day_name(d: date) -> str:
     return DIAS_ES[(d.weekday() + 1) % 7]
 
@@ -774,6 +828,7 @@ def render_day_card_html(
     selected_month: int,
     registro: pd.DataFrame,
     servidores: pd.DataFrame,
+    ventas_martes: pd.DataFrame,
     service_categories: dict[str, str],
     cfg: dict,
 ) -> str:
@@ -785,7 +840,22 @@ def render_day_card_html(
         {"Servidor": member, "ServicioActividad": f"Limpieza Grupo #{cleaning_group}"}
         for member in cleaning_members
     ]
-    duplicados = detectar_duplicados_dia(regs, cleaning_privileges)
+    ventas_privileges = []
+    ventas_group_indexes = []
+    ventas_rows = servicios[servicios["ServicioActividad"].map(is_ventas_martes)]
+    for idx, row in ventas_rows.iterrows():
+        members = ventas_martes_members(ventas_martes, row["Servidor"])
+        if members:
+            ventas_group_indexes.append(idx)
+            ventas_privileges.extend(
+                {
+                    "Servidor": member,
+                    "ServicioActividad": f"Ventas Martes {row['Servidor']}",
+                }
+                for member in members
+            )
+    regs_for_duplicates = regs.drop(index=ventas_group_indexes) if ventas_group_indexes else regs
+    duplicados = detectar_duplicados_dia(regs_for_duplicates, cleaning_privileges + ventas_privileges)
     outside = " outside-month" if d.month != selected_month else ""
     month_tag = MESES_ES[d.month][:3]
 
@@ -829,7 +899,15 @@ def render_day_card_html(
             for _, row in group.iterrows():
                 servidor = row["Servidor"] if row["Servidor"] else "Sin servidor asignado"
                 obs = f" — {row['Observaciones']}" if row["Observaciones"] else ""
-                parts.append(f'<div class="person-line">• {e(servidor)}{e(obs)}</div>')
+                venta_members = ventas_martes_members(ventas_martes, servidor) if is_ventas_martes(servicio) else []
+                if venta_members:
+                    members_html = "".join(
+                        f'<div class="person-line">• {e(member)}</div>' for member in venta_members
+                    )
+                    parts.append(f'<div class="person-line"><strong>{e(servidor)}</strong>{e(obs)}</div>')
+                    parts.append(f'<div class="members-list">{members_html}</div>')
+                else:
+                    parts.append(f'<div class="person-line">• {e(servidor)}{e(obs)}</div>')
             parts.append('</div></details>')
 
     if not actividades.empty:
@@ -853,6 +931,7 @@ def render_week(
     month: int,
     registro: pd.DataFrame,
     servidores: pd.DataFrame,
+    ventas_martes: pd.DataFrame,
     service_categories: dict[str, str],
     cfg: dict,
 ) -> None:
@@ -877,7 +956,8 @@ def render_week(
     )
 
     cards = "".join(
-        render_day_card_html(d, month, registro, servidores, service_categories, cfg) for d in week
+        render_day_card_html(d, month, registro, servidores, ventas_martes, service_categories, cfg)
+        for d in week
     )
     st.markdown(f'<div class="calendar-grid">{cards}</div>', unsafe_allow_html=True)
 
@@ -899,7 +979,7 @@ except Exception as exc:
     st.error(f"No pude cargar los datos. Revisa Google Sheets o el Excel local. Detalle: {exc}")
     st.stop()
 
-servidores_df, servicios_df, registro_df, cfg = prepare_data(data)
+servidores_df, servicios_df, registro_df, ventas_martes_df, cfg = prepare_data(data)
 service_categories = build_service_category_map(servicios_df)
 
 today = date.today()
@@ -919,7 +999,7 @@ with filter_col_3:
 
 weeks = month_weeks_full(int(year), int(month))
 for week in weeks:
-    render_week(week, int(month), registro_df, servidores_df, service_categories, cfg)
+    render_week(week, int(month), registro_df, servidores_df, ventas_martes_df, service_categories, cfg)
 
 with st.sidebar:
     st.header("⚙️ Configuración")
