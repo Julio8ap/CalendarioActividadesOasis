@@ -485,6 +485,7 @@ SHEETS = [
 ]
 OPTIONAL_SHEETS = ["Ventas Martes"]
 LOCAL_EXCEL = "calendario_iglesia_datos.xlsx"
+DOUBLE_PRIVILEGE_FLAG_COL = "Aplica doble privilegio"
 
 
 # =========================
@@ -763,6 +764,12 @@ def prepare_data(data: dict):
     servicios = servicios.copy()
     servicios["Servicio"] = servicios["Servicio"].fillna("").astype(str).str.strip()
     servicios["Categoria"] = servicios["Categoria"].fillna("").astype(str).str.strip()
+    if DOUBLE_PRIVILEGE_FLAG_COL in servicios.columns:
+        servicios[DOUBLE_PRIVILEGE_FLAG_COL] = (
+            servicios[DOUBLE_PRIVILEGE_FLAG_COL].fillna("Si").astype(str).str.strip()
+        )
+    else:
+        servicios[DOUBLE_PRIVILEGE_FLAG_COL] = "Si"
 
     if ventas_martes.empty:
         ventas_martes = pd.DataFrame(columns=["Servidor", "Grupo", "Activo", "Notas"])
@@ -842,6 +849,24 @@ def build_service_category_map(servicios: pd.DataFrame) -> dict[str, str]:
     }
 
 
+def truthy_flag(value) -> bool:
+    return key_text(value) not in ["no", "n", "false", "falso", "0"]
+
+
+def build_double_privilege_map(servicios: pd.DataFrame) -> dict[str, bool]:
+    if servicios.empty or DOUBLE_PRIVILEGE_FLAG_COL not in servicios.columns:
+        return {}
+    return {
+        key_text(row["Servicio"]): truthy_flag(row[DOUBLE_PRIVILEGE_FLAG_COL])
+        for _, row in servicios.iterrows()
+        if key_text(row["Servicio"])
+    }
+
+
+def applies_to_double_privilege(servicio: str, double_privilege_services: dict[str, bool]) -> bool:
+    return double_privilege_services.get(key_text(servicio), True)
+
+
 def service_tone_class(servicio: str, service_categories: dict[str, str]) -> str:
     category = key_text(service_categories.get(key_text(servicio), ""))
     if category != "servicio":
@@ -891,6 +916,7 @@ def render_day_card_html(
     servidores: pd.DataFrame,
     ventas_martes: pd.DataFrame,
     service_categories: dict[str, str],
+    double_privilege_services: dict[str, bool],
     cfg: dict,
 ) -> str:
     regs = registros_del_dia(registro, d)
@@ -903,7 +929,10 @@ def render_day_card_html(
     ]
     ventas_privileges = []
     ventas_group_indexes = []
-    ventas_rows = servicios[servicios["ServicioActividad"].map(is_ventas_martes)]
+    ventas_rows = servicios[
+        (servicios["ServicioActividad"].map(is_ventas_martes))
+        & (servicios["ServicioActividad"].map(lambda service: applies_to_double_privilege(service, double_privilege_services)))
+    ]
     for idx, row in ventas_rows.iterrows():
         members = ventas_martes_members(ventas_martes, row["Servidor"])
         if members:
@@ -915,7 +944,11 @@ def render_day_card_html(
                 }
                 for member in members
             )
-    regs_for_duplicates = regs.drop(index=ventas_group_indexes) if ventas_group_indexes else regs
+    alert_regs = regs[
+        regs["ServicioActividad"].map(lambda service: applies_to_double_privilege(service, double_privilege_services))
+    ]
+    removable_indexes = [idx for idx in ventas_group_indexes if idx in alert_regs.index]
+    regs_for_duplicates = alert_regs.drop(index=removable_indexes) if removable_indexes else alert_regs
     duplicados = detectar_duplicados_dia(regs_for_duplicates, cleaning_privileges + ventas_privileges)
     outside = " outside-month" if d.month != selected_month else ""
     month_tag = MESES_ES[d.month][:3]
@@ -994,6 +1027,7 @@ def render_week(
     servidores: pd.DataFrame,
     ventas_martes: pd.DataFrame,
     service_categories: dict[str, str],
+    double_privilege_services: dict[str, bool],
     cfg: dict,
 ) -> None:
     week_start = start_of_week_sunday(week[0])
@@ -1017,7 +1051,16 @@ def render_week(
     )
 
     cards = "".join(
-        render_day_card_html(d, month, registro, servidores, ventas_martes, service_categories, cfg)
+        render_day_card_html(
+            d,
+            month,
+            registro,
+            servidores,
+            ventas_martes,
+            service_categories,
+            double_privilege_services,
+            cfg,
+        )
         for d in week
     )
     st.markdown(f'<div class="calendar-grid">{cards}</div>', unsafe_allow_html=True)
@@ -1042,6 +1085,7 @@ except Exception as exc:
 
 servidores_df, servicios_df, registro_df, ventas_martes_df, cfg = prepare_data(data)
 service_categories = build_service_category_map(servicios_df)
+double_privilege_services = build_double_privilege_map(servicios_df)
 
 today = date.today()
 filter_col_1, filter_col_2, filter_col_3 = st.columns([0.65, 0.85, 4.5])
@@ -1060,7 +1104,16 @@ with filter_col_3:
 
 weeks = month_weeks_full(int(year), int(month))
 for week in weeks:
-    render_week(week, int(month), registro_df, servidores_df, ventas_martes_df, service_categories, cfg)
+    render_week(
+        week,
+        int(month),
+        registro_df,
+        servidores_df,
+        ventas_martes_df,
+        service_categories,
+        double_privilege_services,
+        cfg,
+    )
 
 with st.sidebar:
     st.header("⚙️ Configuración")
