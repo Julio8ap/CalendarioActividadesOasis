@@ -867,6 +867,10 @@ def applies_to_double_privilege(servicio: str, double_privilege_services: dict[s
     return double_privilege_services.get(key_text(servicio), True)
 
 
+def bool_series(values, index) -> pd.Series:
+    return pd.Series([bool(value) for value in values], index=index, dtype=bool)
+
+
 def service_tone_class(servicio: str, service_categories: dict[str, str]) -> str:
     category = key_text(service_categories.get(key_text(servicio), ""))
     if category != "servicio":
@@ -929,10 +933,15 @@ def render_day_card_html(
     ]
     ventas_privileges = []
     ventas_group_indexes = []
-    ventas_rows = servicios[
-        (servicios["ServicioActividad"].map(is_ventas_martes))
-        & (servicios["ServicioActividad"].map(lambda service: applies_to_double_privilege(service, double_privilege_services)))
-    ]
+    ventas_mask = bool_series(
+        (
+            is_ventas_martes(service)
+            and applies_to_double_privilege(service, double_privilege_services)
+            for service in servicios["ServicioActividad"]
+        ),
+        servicios.index,
+    )
+    ventas_rows = servicios[ventas_mask]
     for idx, row in ventas_rows.iterrows():
         members = ventas_martes_members(ventas_martes, row["Servidor"])
         if members:
@@ -944,9 +953,14 @@ def render_day_card_html(
                 }
                 for member in members
             )
-    alert_regs = regs[
-        regs["ServicioActividad"].map(lambda service: applies_to_double_privilege(service, double_privilege_services))
-    ]
+    alert_mask = bool_series(
+        (
+            applies_to_double_privilege(service, double_privilege_services)
+            for service in regs["ServicioActividad"]
+        ),
+        regs.index,
+    )
+    alert_regs = regs[alert_mask]
     removable_indexes = [idx for idx in ventas_group_indexes if idx in alert_regs.index]
     regs_for_duplicates = alert_regs.drop(index=removable_indexes) if removable_indexes else alert_regs
     duplicados = detectar_duplicados_dia(regs_for_duplicates, cleaning_privileges + ventas_privileges)
